@@ -21,7 +21,7 @@
             <id>artifactory-mirror</id>
             <mirrorOf>*</mirrorOf>
             <name>JFrog Artifactory Mirror</name>
-            <url>https://elinaf.jfrog.io/artifactory/libs-release</url>
+            <url>https://elinaf.jfrog.io/artifactory/edenb-pipeline-libs-release</url>
         </mirror>
     </mirrors>
 
@@ -31,13 +31,13 @@
             <repositories>
                 <repository>
                     <id>central</id>
-                    <url>https://elinaf.jfrog.io/artifactory/libs-release</url>
+                    <url>https://elinaf.jfrog.io/artifactory/edenb-pipeline-libs-release</url>
                     <releases><enabled>true</enabled></releases>
                     <snapshots><enabled>false</enabled></snapshots>
                 </repository>
                 <repository>
                     <id>snapshots</id>
-                    <url>https://elinaf.jfrog.io/artifactory/libs-snapshot</url>
+                    <url>https://elinaf.jfrog.io/artifactory/edenb-pipeline-libs-snapshot</url>
                     <releases><enabled>false</enabled></releases>
                     <snapshots><enabled>true</enabled></snapshots>
                 </repository>

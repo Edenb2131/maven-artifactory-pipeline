@@ -67,13 +67,13 @@
     <distributionManagement>
         <repository>
             <id>central</id>
-            <name>elinaf-libs-release</name>
-            <url>https://elinaf.jfrog.io/artifactory/libs-release</url>
+            <name>edenb-pipeline-libs-release</name>
+            <url>https://elinaf.jfrog.io/artifactory/edenb-pipeline-libs-release</url>
         </repository>
         <snapshotRepository>
             <id>snapshots</id>
-            <name>elinaf-libs-snapshot</name>
-            <url>https://elinaf.jfrog.io/artifactory/libs-snapshot</url>
+            <name>edenb-pipeline-libs-snapshot</name>
+            <url>https://elinaf.jfrog.io/artifactory/edenb-pipeline-libs-snapshot</url>
         </snapshotRepository>
     </distributionManagement>
 
