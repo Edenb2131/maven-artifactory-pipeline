@@ -85,13 +85,19 @@ Set via: **Settings → Secrets and variables → Actions → New repository sec
 
 ## Snapshot History
 
-| Run | Commit | Deployed Version | Artifactory Timestamp |
-|-----|--------|------------------|-----------------------|
-| #1  | Initial pipeline setup | `1.0.0-SNAPSHOT` | triggered on push |
-| #2  | Add README documentation | `1.0.0-SNAPSHOT` | triggered on push |
-| #3  | Add snapshot run notes | `1.0.0-SNAPSHOT` | triggered on push |
+| Run | GitHub Actions Run | Commit | Deployed Version | Date (UTC) |
+|-----|--------------------|--------|------------------|------------|
+| #1  | [23111356614](https://github.com/Edenb2131/maven-artifactory-pipeline/actions/runs/23111356614) | `fix: use Artifactory-generated settings.xml with plugin repositories` | `1.0.0-SNAPSHOT` | 2026-03-15 13:29 |
+| #2  | [23111394587](https://github.com/Edenb2131/maven-artifactory-pipeline/actions/runs/23111394587) | `feat: add StringUtils class with reverse and palindrome methods` | `1.0.0-SNAPSHOT` | 2026-03-15 13:31 |
+| #3  | [23111428877](https://github.com/Edenb2131/maven-artifactory-pipeline/actions/runs/23111428877) | `feat: add MathUtils class with factorial, isPrime, fibonacci` | `1.0.0-SNAPSHOT` | 2026-03-15 13:33 |
 
-Each snapshot is stored with a unique build timestamp in Artifactory under `edenb-pipeline-libs-snapshot/io/jfrog/example/maven-artifactory-pipeline/1.0.0-SNAPSHOT/`.
+Each snapshot is stored with a unique build timestamp in Artifactory under:
+`edenb-pipeline-libs-snapshot/io/jfrog/example/maven-artifactory-pipeline/1.0.0-SNAPSHOT/`
+
+Example artifacts per run:
+- `maven-artifactory-pipeline-1.0.0-YYYYMMDD.HHmmss-N.jar`
+- `maven-artifactory-pipeline-1.0.0-YYYYMMDD.HHmmss-N-sources.jar`
+- `maven-artifactory-pipeline-1.0.0-YYYYMMDD.HHmmss-N-javadoc.jar`
 
 ---
 
