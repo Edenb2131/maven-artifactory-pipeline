@@ -1,23 +1,61 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
-          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0 http://maven.apache.org/xsd/settings-1.0.0.xsd">
+<settings xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.2.0 https://maven.apache.org/xsd/settings-1.2.0.xsd"
+          xmlns="http://maven.apache.org/SETTINGS/1.2.0"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
 
-    <!--
-        Server credentials for deploying to JFrog Artifactory.
-        IDs must match the <id> values in pom.xml distributionManagement.
-    -->
-    <servers>
-        <server>
-            <id>central</id>
-            <username>${env.ARTIFACTORY_USERNAME}</username>
-            <password>${env.ARTIFACTORY_PASSWORD}</password>
-        </server>
-        <server>
-            <id>snapshots</id>
-            <username>${env.ARTIFACTORY_USERNAME}</username>
-            <password>${env.ARTIFACTORY_PASSWORD}</password>
-        </server>
-    </servers>
+  <servers>
+    <server>
+      <username>${env.ARTIFACTORY_USERNAME}</username>
+      <password>${env.ARTIFACTORY_PASSWORD}</password>
+      <id>central</id>
+    </server>
+    <server>
+      <username>${env.ARTIFACTORY_USERNAME}</username>
+      <password>${env.ARTIFACTORY_PASSWORD}</password>
+      <id>snapshots</id>
+    </server>
+  </servers>
+
+  <profiles>
+    <profile>
+      <repositories>
+        <repository>
+          <snapshots>
+            <enabled>false</enabled>
+          </snapshots>
+          <id>central</id>
+          <name>edenb-pipeline-libs-release</name>
+          <url>https://elinaf.jfrog.io/artifactory/edenb-pipeline-libs-release</url>
+        </repository>
+        <repository>
+          <snapshots />
+          <id>snapshots</id>
+          <name>edenb-pipeline-libs-snapshot</name>
+          <url>https://elinaf.jfrog.io/artifactory/edenb-pipeline-libs-snapshot</url>
+        </repository>
+      </repositories>
+      <pluginRepositories>
+        <pluginRepository>
+          <snapshots>
+            <enabled>false</enabled>
+          </snapshots>
+          <id>central</id>
+          <name>edenb-pipeline-libs-release</name>
+          <url>https://elinaf.jfrog.io/artifactory/edenb-pipeline-libs-release</url>
+        </pluginRepository>
+        <pluginRepository>
+          <snapshots />
+          <id>snapshots</id>
+          <name>edenb-pipeline-libs-snapshot</name>
+          <url>https://elinaf.jfrog.io/artifactory/edenb-pipeline-libs-snapshot</url>
+        </pluginRepository>
+      </pluginRepositories>
+      <id>artifactory</id>
+    </profile>
+  </profiles>
+
+  <activeProfiles>
+    <activeProfile>artifactory</activeProfile>
+  </activeProfiles>
 
 </settings>
