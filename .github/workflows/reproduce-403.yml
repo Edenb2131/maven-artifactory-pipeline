@@ -1,0 +1,84 @@
+name: Reproduce Maven 403 (Parallel PUT Issue)
+
+# Purpose: Reproduce the duplicate-PUT bug introduced in Maven 3.9.12 / resolver 1.9.25.
+#
+# What this tests:
+#   Maven 3.9.12 sends two concurrent PUT requests for the same artifact file.
+#   The first PUT succeeds (201). The second hits the now-existing file, so
+#   Artifactory treats it as an overwrite — which requires DELETE permission.
+#   A user with Deploy-only (no Delete) will get a 403 on the second request.
+#
+# Prerequisites (one-time Artifactory setup):
+#   1. Create a user "deploy-only-test" in your Artifactory instance.
+#   2. Grant it Deploy permission (NOT Delete) on edenb-pipeline-libs-snapshot.
+#   3. Add the user's password as a GitHub Actions secret: ARTIFACTORY_DEPLOY_ONLY_PASSWORD
+#
+# Usage:
+#   Trigger manually via Actions → "Reproduce Maven 403" → Run workflow.
+#   Run once with maven_version=3.9.12 (should 403) and once with 3.9.10 (should succeed).
+
+on:
+  workflow_dispatch:
+    inputs:
+      maven_version:
+        description: 'Maven version to test (3.9.12 to reproduce bug, 3.9.10 to compare)'
+        required: true
+        default: '3.9.12'
+
+env:
+  ARTIFACTORY_URL: https://elinaf.jfrog.io/artifactory
+  # This user must have Deploy permission but NOT Delete on the snapshot repo.
+  ARTIFACTORY_USERNAME: deploy-only-test
+
+jobs:
+  reproduce-403:
+    name: Deploy SNAPSHOT with Maven ${{ github.event.inputs.maven_version }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Install Maven ${{ github.event.inputs.maven_version }}
+        run: |
+          MVN_VERSION=${{ github.event.inputs.maven_version }}
+          curl -fsSL https://downloads.apache.org/maven/maven-3/${MVN_VERSION}/binaries/apache-maven-${MVN_VERSION}-bin.tar.gz \
+            | tar xz -C /opt
+          echo "/opt/apache-maven-${MVN_VERSION}/bin" >> $GITHUB_PATH
+
+      - name: Verify Maven version
+        run: mvn --version
+
+      # Deploy with verbose HTTP logging so we can see duplicate PUT requests in the job output.
+      # -Dorg.slf4j.simpleLogger.log.org.apache.maven.wagon=debug enables transfer logging.
+      - name: Deploy SNAPSHOT to Artifactory
+        run: |
+          mvn deploy \
+            --settings .mvn/settings.xml \
+            --batch-mode \
+            -DskipTests \
+            -Dorg.slf4j.simpleLogger.log.org.apache.maven.wagon=debug \
+            -Dorg.slf4j.simpleLogger.log.org.eclipse.aether=debug
+        env:
+          ARTIFACTORY_USERNAME: ${{ env.ARTIFACTORY_USERNAME }}
+          ARTIFACTORY_PASSWORD: ${{ secrets.ARTIFACTORY_DEPLOY_ONLY_PASSWORD }}
+
+      # Print a reminder of what to look for in the Artifactory access log after this run.
+      - name: What to check in Artifactory logs
+        if: always()
+        run: |
+          echo "========================================================"
+          echo " Check artifactory-access.log for this pattern:"
+          echo "   [ACCEPTED DEPLOY] ...javadoc.jar"
+          echo "   [DENIED DELETE]   ...javadoc.jar  (same file, ~ms later)"
+          echo ""
+          echo " Check artifactory-request.log for two PUT entries:"
+          echo "   PUT .../javadoc.jar | 201 | ... (first upload)"
+          echo "   PUT .../javadoc.jar | 403 | ... (duplicate blocked)"
+          echo "========================================================"
