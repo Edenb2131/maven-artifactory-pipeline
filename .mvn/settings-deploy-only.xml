@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<settings xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.2.0 https://maven.apache.org/xsd/settings-1.2.0.xsd"
+          xmlns="http://maven.apache.org/SETTINGS/1.2.0"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+
+  <!--
+    Used by the reproduce-403 workflow.
+    - central (release repo): resolved with main credentials so plugins/deps download fine.
+    - snapshots (snapshot repo): resolved with a deploy-only user (no Delete permission)
+      to trigger the 403 when Maven 3.9.12 fires its duplicate concurrent PUT.
+  -->
+  <servers>
+    <server>
+      <id>central</id>
+      <username>${env.ARTIFACTORY_USERNAME}</username>
+      <password>${env.ARTIFACTORY_PASSWORD}</password>
+    </server>
+    <server>
+      <id>snapshots</id>
+      <username>${env.DEPLOY_ONLY_USERNAME}</username>
+      <password>${env.DEPLOY_ONLY_PASSWORD}</password>
+    </server>
+  </servers>
+
+  <profiles>
+    <profile>
+      <id>artifactory</id>
+      <repositories>
+        <repository>
+          <id>central</id>
+          <name>edenb-pipeline-libs-release</name>
+          <url>https://elinaf.jfrog.io/artifactory/edenb-pipeline-libs-release</url>
+          <snapshots><enabled>false</enabled></snapshots>
+        </repository>
+        <repository>
+          <id>snapshots</id>
+          <name>edenb-pipeline-libs-snapshot</name>
+          <url>https://elinaf.jfrog.io/artifactory/edenb-pipeline-libs-snapshot</url>
+          <snapshots/>
+        </repository>
+      </repositories>
+      <pluginRepositories>
+        <pluginRepository>
+          <id>central</id>
+          <name>edenb-pipeline-libs-release</name>
+          <url>https://elinaf.jfrog.io/artifactory/edenb-pipeline-libs-release</url>
+          <snapshots><enabled>false</enabled></snapshots>
+        </pluginRepository>
+        <pluginRepository>
+          <id>snapshots</id>
+          <name>edenb-pipeline-libs-snapshot</name>
+          <url>https://elinaf.jfrog.io/artifactory/edenb-pipeline-libs-snapshot</url>
+          <snapshots/>
+        </pluginRepository>
+      </pluginRepositories>
+    </profile>
+  </profiles>
+
+  <activeProfiles>
+    <activeProfile>artifactory</activeProfile>
+  </activeProfiles>
+
+</settings>

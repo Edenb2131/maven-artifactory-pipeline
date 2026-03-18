@@ -56,18 +56,21 @@ jobs:
         run: mvn --version
 
       # Deploy with verbose HTTP logging so we can see duplicate PUT requests in the job output.
-      # -Dorg.slf4j.simpleLogger.log.org.apache.maven.wagon=debug enables transfer logging.
+      # Uses settings-deploy-only.xml: main creds for the release repo (plugin resolution)
+      # and deploy-only-test creds for the snapshot repo (no Delete permission → triggers 403).
       - name: Deploy SNAPSHOT to Artifactory
         run: |
           mvn deploy \
-            --settings .mvn/settings.xml \
+            --settings .mvn/settings-deploy-only.xml \
             --batch-mode \
             -DskipTests \
             -Dorg.slf4j.simpleLogger.log.org.apache.maven.wagon=debug \
             -Dorg.slf4j.simpleLogger.log.org.eclipse.aether=debug
         env:
-          ARTIFACTORY_USERNAME: ${{ env.ARTIFACTORY_USERNAME }}
-          ARTIFACTORY_PASSWORD: ${{ secrets.ARTIFACTORY_DEPLOY_ONLY_PASSWORD }}
+          ARTIFACTORY_USERNAME: edenb
+          ARTIFACTORY_PASSWORD: ${{ secrets.ARTIFACTORY_PASSWORD }}
+          DEPLOY_ONLY_USERNAME: deploy-only-test
+          DEPLOY_ONLY_PASSWORD: ${{ secrets.ARTIFACTORY_DEPLOY_ONLY_PASSWORD }}
 
       # Print a reminder of what to look for in the Artifactory access log after this run.
       - name: What to check in Artifactory logs
