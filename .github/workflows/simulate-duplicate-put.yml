@@ -1,0 +1,55 @@
+name: Simulate Duplicate PUT → 403 Reproduction
+
+# Deterministically reproduces the Artifactory 403 the customer sees.
+#
+# Instead of waiting for a Maven race condition, this workflow runs a Python
+# script that makes two sequential PUT requests to the same artifact path:
+#
+#   PUT #1  →  201  (file uploaded, Artifactory logs: ACCEPTED DEPLOY)
+#   PUT #2  →  403  (overwrite blocked, Artifactory logs: DENIED DELETE)
+#
+# This proves that the root cause is Artifactory's permission model:
+# overwriting an existing file requires Delete permission, which the
+# deploy-only-test user intentionally does not have.
+#
+# After the run, a cleanup step deletes the test artifact using the main
+# credentials (deploy-only-test cannot delete).
+
+on:
+  workflow_dispatch:
+
+env:
+  ARTIFACTORY_URL:  https://elinaf.jfrog.io/artifactory
+  ARTIFACTORY_REPO: edenb-pipeline-libs-snapshot
+
+jobs:
+  simulate-duplicate-put:
+    name: Simulate Duplicate PUT
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run duplicate PUT simulation
+        run: python3 scripts/simulate_duplicate_put.py
+        env:
+          ARTIFACTORY_URL:      ${{ env.ARTIFACTORY_URL }}
+          ARTIFACTORY_REPO:     ${{ env.ARTIFACTORY_REPO }}
+          DEPLOY_ONLY_USERNAME: deploy-only-test
+          DEPLOY_ONLY_PASSWORD: ${{ secrets.ARTIFACTORY_DEPLOY_ONLY_PASSWORD }}
+
+      - name: Clean up test artifact (requires Delete permission — uses main user)
+        if: always()
+        run: |
+          # List any test artifacts uploaded by this run and delete them.
+          # deploy-only-test cannot delete, so we use the main edenb credentials.
+          SEARCH_URL="${{ env.ARTIFACTORY_URL }}/${{ env.ARTIFACTORY_REPO }}/io/jfrog/example/duplicate-put-test/"
+          echo "Cleaning up test artifacts under: $SEARCH_URL"
+          curl -s -u "edenb:${{ secrets.ARTIFACTORY_PASSWORD }}" \
+               -X DELETE "$SEARCH_URL" || echo "Cleanup done (or nothing to delete)"
