@@ -47,6 +47,50 @@ jobs:
       - name: Verify Maven version
         run: mvn --version
 
+      # Generate 300 dummy Java classes with large javadoc blocks to inflate the
+      # javadoc jar from ~122 kB to several MB. This makes the upload take long
+      # enough that the second concurrent PUT from Maven 3.9.12 can arrive after
+      # the first completes — the timing condition needed to trigger the 403.
+      # Files are generated at runtime so the repo stays clean.
+      - name: Pad sources to inflate javadoc jar size
+        run: |
+          mkdir -p src/main/java/io/jfrog/example/padding
+          for i in $(seq 1 300); do
+            cat > src/main/java/io/jfrog/example/padding/PaddingClass${i}.java << JAVAEOF
+          package io.jfrog.example.padding;
+
+          /**
+           * Padding class ${i} — exists solely to inflate the javadoc jar size so that
+           * the upload takes long enough to expose the Maven 3.9.12 duplicate-PUT race condition.
+           *
+           * <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor
+           * incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud
+           * exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure
+           * dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.
+           * Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt
+           * mollit anim id est laborum. Sed ut perspiciatis unde omnis iste natus error sit voluptatem
+           * accusantium doloremque laudantium, totam rem aperiam eaque ipsa quae ab illo inventore
+           * veritatis et quasi architecto beatae vitae dicta sunt explicabo. Nemo enim ipsam
+           * voluptatem quia voluptas sit aspernatur aut odit aut fugit sed quia consequuntur magni
+           * dolores eos qui ratione voluptatem sequi nesciunt neque porro quisquam est qui dolorem
+           * ipsum quia dolor sit amet consectetur adipisci velit sed quia non numquam eius modi
+           * tempora incidunt ut labore et dolore magnam aliquam quaerat voluptatem.
+           *
+           * @see PaddingClass1
+           * @since 1.0.0
+           */
+          public class PaddingClass${i} {
+
+              /**
+               * Returns the class index.
+               * @return index ${i}
+               */
+              public int index() { return ${i}; }
+          }
+          JAVAEOF
+          done
+          echo "Generated $(ls src/main/java/io/jfrog/example/padding/ | wc -l) padding classes"
+
       # Replicates the customer's exact command pattern:
       #   - -Prelease-snapshot activates the javadoc plugin (as in the customer's build)
       #   - -DaltDeploymentRepository bypasses distributionManagement (as in the customer's build)
