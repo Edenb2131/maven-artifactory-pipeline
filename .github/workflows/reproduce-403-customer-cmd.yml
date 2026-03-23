@@ -97,6 +97,7 @@ jobs:
             -Prelease-snapshot \
             -DaltDeploymentRepository=snapshots::${{ env.ARTIFACTORY_SNAPSHOT_URL }} \
             -DretryFailedDeploymentCount=3 \
+            -Daether.connector.basic.parallelPut=false \
             --batch-mode
         env:
           ARTIFACTORY_USERNAME: edenb
