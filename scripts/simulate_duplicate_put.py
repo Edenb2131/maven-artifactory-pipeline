@@ -25,38 +25,54 @@ Environment variables required:
 
 import os
 import sys
+import ssl
 import datetime
 import urllib.request
 import urllib.error
 import base64
 
+# Skip SSL verification for local runs (macOS Python 3.14 doesn't trust the
+# JFrog Cloud cert chain by default). The GitHub Actions runner is unaffected.
+_SSL_CTX = ssl.create_default_context()
+_SSL_CTX.check_hostname = False
+_SSL_CTX.verify_mode = ssl.CERT_NONE
 
-def put_request(url: str, payload: bytes, username: str, password: str) -> tuple[int, str]:
+
+def put_request(url: str, payload: bytes, username: str, password: str) -> tuple[str, int, str]:
+    """Send a PUT request and return (iso_timestamp, status_code, response_body)."""
     token = base64.b64encode(f"{username}:{password}".encode()).decode()
-    req = urllib.request.Request(
-        url,
-        data=payload,
-        method="PUT",
-        headers={
-            "Authorization": f"Basic {token}",
-            "Content-Type": "application/octet-stream",
-        },
-    )
+    headers = {
+        "Authorization": f"Basic {token}",
+        "Content-Type": "application/octet-stream",
+        "Content-Length": str(len(payload)),
+        "User-Agent": "simulate_duplicate_put/1.0",
+    }
+    req = urllib.request.Request(url, data=payload, method="PUT", headers=headers)
+
+    sent_at = datetime.datetime.now(datetime.UTC).isoformat(timespec="milliseconds")
     try:
-        with urllib.request.urlopen(req) as resp:
-            return resp.status, resp.read().decode(errors="replace")
+        with urllib.request.urlopen(req, context=_SSL_CTX) as resp:
+            return sent_at, resp.status, resp.read().decode(errors="replace")
     except urllib.error.HTTPError as e:
-        return e.code, e.read().decode(errors="replace")
+        return sent_at, e.code, e.read().decode(errors="replace")
+
+
+def print_request(label: str, method: str, url: str, headers: dict, payload: bytes) -> None:
+    print(f"  {method} {url}")
+    for k, v in headers.items():
+        display = "***" if k.lower() == "authorization" else v
+        print(f"  {k}: {display}")
+    print(f"  Body: <binary payload, {len(payload)} bytes>")
 
 
 def main() -> None:
-    base_url  = os.environ["ARTIFACTORY_URL"].rstrip("/")
-    repo      = os.environ["ARTIFACTORY_REPO"]
-    username  = os.environ["DEPLOY_ONLY_USERNAME"]
-    password  = os.environ["DEPLOY_ONLY_PASSWORD"]
+    base_url  = os.environ.get("ARTIFACTORY_URL",      "https://elinaf.jfrog.io/artifactory")
+    repo      = os.environ.get("ARTIFACTORY_REPO",     "edenb-pipeline-libs-snapshot")
+    username  = os.environ.get("DEPLOY_ONLY_USERNAME", "deploy-only-test")
+    password  = os.environ.get("DEPLOY_ONLY_PASSWORD", "Password1!")
 
     # Unique path per run — ensures PUT #1 always hits a clean slot.
-    ts = datetime.datetime.utcnow().strftime("%Y%m%d%H%M%S")
+    ts = datetime.datetime.now(datetime.UTC).strftime("%Y%m%d%H%M%S")
     artifact_path = (
         f"io/jfrog/example/duplicate-put-test/{ts}/"
         f"test-artifact-{ts}.bin"
@@ -74,10 +90,21 @@ def main() -> None:
     print(f"  Deploy user     : {username}")
     print(f"  Artifact path   : {artifact_path}\n")
 
+    request_headers = {
+        "Authorization": f"Basic <redacted>",
+        "Content-Type": "application/octet-stream",
+        "Content-Length": str(len(payload)),
+        "User-Agent": "simulate_duplicate_put/1.0",
+    }
+
     # ── PUT #1 ──────────────────────────────────────────────────────────────
     print("► PUT #1  (first upload — simulates Maven uploading the javadoc jar)")
-    status1, body1 = put_request(url, payload, username, password)
-    print(f"  HTTP {status1}")
+    print()
+    print_request("PUT #1", "PUT", url, request_headers, payload)
+    print()
+    sent1, status1, body1 = put_request(url, payload, username, password)
+    print(f"  Timestamp : {sent1}")
+    print(f"  HTTP      : {status1}")
 
     if status1 == 201:
         print("  ✓ ACCEPTED DEPLOY — file written to Artifactory\n")
@@ -87,24 +114,28 @@ def main() -> None:
 
     # ── PUT #2 ──────────────────────────────────────────────────────────────
     print("► PUT #2  (duplicate upload — simulates Maven 3.9.12 second concurrent PUT)")
-    status2, body2 = put_request(url, payload, username, password)
-    print(f"  HTTP {status2}")
+    print()
+    print_request("PUT #2", "PUT", url, request_headers, payload)
+    print()
+    sent2, status2, body2 = put_request(url, payload, username, password)
+    print(f"  Timestamp : {sent2}")
+    print(f"  HTTP      : {status2}")
 
     if status2 == 403:
         print("  ✓ DENIED DELETE — overwrite blocked (user lacks Delete permission)")
-        print(f"\n  Artifactory response: {body2.strip()[:300]}\n")
+        print(f"\n  Artifactory response: {body2.strip()[:400]}\n")
     elif status2 == 201:
         print("  Both uploads succeeded — deploy-only-test may have Delete permission.")
         print("  Remove Delete/Overwrite from the user's permission target and retry.\n")
     else:
-        print(f"  Unexpected response: {body2[:300]}\n")
+        print(f"  Unexpected response: {body2[:400]}\n")
 
     # ── Summary ─────────────────────────────────────────────────────────────
     print("=" * 68)
     print("  Summary")
     print("=" * 68)
-    print(f"  PUT #1  →  HTTP {status1}  (initial upload)")
-    print(f"  PUT #2  →  HTTP {status2}  (same path, overwrite attempted)\n")
+    print(f"  PUT #1  →  [{sent1}]  HTTP {status1}  (initial upload)")
+    print(f"  PUT #2  →  [{sent2}]  HTTP {status2}  (same path, overwrite attempted)\n")
 
     if status1 == 201 and status2 == 403:
         print("  ✓ Reproduction successful.\n")

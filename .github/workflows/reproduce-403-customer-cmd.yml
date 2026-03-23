@@ -1,15 +1,25 @@
 name: Reproduce 403 - Customer Command Pattern
 
-# Replicates the exact command the customer uses:
+# Deterministically reproduces the customer's 403 by replicating the TRUE root cause:
 #
+#   Two plugin executions in the release-snapshot profile both attach an artifact
+#   with classifier=javadoc:
+#     1. maven-javadoc-plugin (attach-javadocs) → real javadoc jar
+#     2. maven-jar-plugin     (empty-javadoc-jar) → empty jar, same classifier
+#
+#   Maven attaches both to the project. The deploy plugin iterates over all
+#   attached artifacts and sends two sequential PUTs to the same remote path:
+#     PUT #1 → real javadoc jar  → 201  (ACCEPTED DEPLOY)
+#     PUT #2 → empty jar         → 403  (DENIED DELETE — overwrite needs Delete permission)
+#
+#   This is exactly what Artifactory's access.log shows in the customer's case.
+#   -Daether.connector.basic.parallelPut=false has no effect because these are
+#   two genuinely separate attached artifacts, not parallel uploads of the same one.
+#
+# Replicates the customer's exact command:
 #   ./mvnw clean deploy -s deployment_settings.xml -V -DskipTests -Prelease-snapshot \
 #     -DaltDeploymentRepository=private-repository::https://...snapshot-internal \
-#     --file path/to/hazelcast-tpc-engine
-#
-# Key differences from the previous reproduce-403.yml attempt:
-#   - Uses -Prelease-snapshot profile to activate javadoc generation
-#   - Uses -DaltDeploymentRepository to override the deploy target (not distributionManagement)
-#   - Deploys with deploy-only-test user (Deploy but no Delete permission)
+#     -DretryFailedDeploymentCount=5
 
 on:
   workflow_dispatch:
@@ -47,53 +57,10 @@ jobs:
       - name: Verify Maven version
         run: mvn --version
 
-      # Generate 300 dummy Java classes with large javadoc blocks to inflate the
-      # javadoc jar from ~122 kB to several MB. This makes the upload take long
-      # enough that the second concurrent PUT from Maven 3.9.12 can arrive after
-      # the first completes — the timing condition needed to trigger the 403.
-      # Files are generated at runtime so the repo stays clean.
-      - name: Pad sources to inflate javadoc jar size
-        run: |
-          mkdir -p src/main/java/io/jfrog/example/padding
-          for i in $(seq 1 300); do
-            cat > src/main/java/io/jfrog/example/padding/PaddingClass${i}.java << JAVAEOF
-          package io.jfrog.example.padding;
-
-          /**
-           * Padding class ${i} — exists solely to inflate the javadoc jar size so that
-           * the upload takes long enough to expose the Maven 3.9.12 duplicate-PUT race condition.
-           *
-           * <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor
-           * incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud
-           * exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure
-           * dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.
-           * Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt
-           * mollit anim id est laborum. Sed ut perspiciatis unde omnis iste natus error sit voluptatem
-           * accusantium doloremque laudantium, totam rem aperiam eaque ipsa quae ab illo inventore
-           * veritatis et quasi architecto beatae vitae dicta sunt explicabo. Nemo enim ipsam
-           * voluptatem quia voluptas sit aspernatur aut odit aut fugit sed quia consequuntur magni
-           * dolores eos qui ratione voluptatem sequi nesciunt neque porro quisquam est qui dolorem
-           * ipsum quia dolor sit amet consectetur adipisci velit sed quia non numquam eius modi
-           * tempora incidunt ut labore et dolore magnam aliquam quaerat voluptatem.
-           *
-           * @see PaddingClass1
-           * @since 1.0.0
-           */
-          public class PaddingClass${i} {
-
-              /**
-               * Returns the class index.
-               * @return index ${i}
-               */
-              public int index() { return ${i}; }
-          }
-          JAVAEOF
-          done
-          echo "Generated $(ls src/main/java/io/jfrog/example/padding/ | wc -l) padding classes"
-
       # Replicates the customer's exact command pattern:
-      #   - -Prelease-snapshot activates the javadoc plugin (as in the customer's build)
+      #   - -Prelease-snapshot activates both javadoc plugin executions (true root cause)
       #   - -DaltDeploymentRepository bypasses distributionManagement (as in the customer's build)
+      #   - -DretryFailedDeploymentCount=3 mirrors the customer's retry flag
       #   - deploy-only-test has Deploy but NOT Delete on the snapshot repo
       - name: Deploy SNAPSHOT to Artifactory (customer command pattern)
         run: |
@@ -103,6 +70,7 @@ jobs:
             -DskipTests \
             -Prelease-snapshot \
             -DaltDeploymentRepository=snapshots::${{ env.ARTIFACTORY_SNAPSHOT_URL }} \
+            -DretryFailedDeploymentCount=3 \
             --batch-mode
         env:
           ARTIFACTORY_USERNAME: edenb
@@ -114,11 +82,15 @@ jobs:
         if: always()
         run: |
           echo "========================================================"
+          echo " Root cause: two plugin executions attach classifier=javadoc"
+          echo "   1. maven-javadoc-plugin:attach-javadocs → real javadoc jar"
+          echo "   2. maven-jar-plugin:empty-javadoc-jar   → empty jar, same path"
+          echo ""
           echo " Check artifactory-request.log for:"
-          echo "   PUT .../maven-artifactory-pipeline-*-javadoc.jar | 201"
-          echo "   PUT .../maven-artifactory-pipeline-*-javadoc.jar | 403  <- bug"
+          echo "   PUT .../maven-artifactory-pipeline-*-javadoc.jar | 201  <- real jar"
+          echo "   PUT .../maven-artifactory-pipeline-*-javadoc.jar | 403  <- empty jar"
           echo ""
           echo " Check artifactory-access.log for:"
-          echo "   [ACCEPTED DEPLOY] ...-javadoc.jar"
-          echo "   [DENIED DELETE]   ...-javadoc.jar  (same file, ~ms later)"
+          echo "   [ACCEPTED DEPLOY] ...-javadoc.jar  ← PUT #1 (real javadoc jar)"
+          echo "   [DENIED DELETE]   ...-javadoc.jar  ← PUT #2 (empty jar, same path)"
           echo "========================================================"

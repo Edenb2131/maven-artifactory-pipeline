@@ -61,6 +61,10 @@
             <id>release-snapshot</id>
             <build>
                 <plugins>
+                    <!--
+                        Execution 1: maven-javadoc-plugin generates the real javadoc jar
+                        and attaches it with classifier=javadoc.
+                    -->
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-javadoc-plugin</artifactId>
@@ -71,6 +75,44 @@
                                 <goals>
                                     <goal>jar</goal>
                                 </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <!--
+                        Execution 2: maven-jar-plugin produces a SECOND artifact with the
+                        same classifier=javadoc. This mirrors the `empty-javadoc-jar`
+                        execution found in hazelcast-tpc-engine's POM.
+
+                        Maven attaches both artifacts to the project. The install and deploy
+                        plugins iterate over all attached artifacts and process each one,
+                        resulting in two PUT requests to the exact same remote path:
+                          PUT #1 → real javadoc jar  → 201 (Accepted Deploy)
+                          PUT #2 → empty jar          → 403 (Denied Delete — overwrite
+                                                             requires Delete permission)
+
+                        This is the actual root cause of the customer's 403, and why
+                        -Daether.connector.basic.parallelPut=false has no effect: the two
+                        uploads are not parallel — they are two genuinely separate attached
+                        artifacts deploying to the same coordinate.
+                    -->
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-jar-plugin</artifactId>
+                        <version>3.4.2</version>
+                        <executions>
+                            <execution>
+                                <id>empty-javadoc-jar</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>jar</goal>
+                                </goals>
+                                <configuration>
+                                    <classifier>javadoc</classifier>
+                                    <!-- Points to a directory that does not exist,
+                                         producing an empty jar — matching the customer's
+                                         [WARNING] JAR will be empty log line. -->
+                                    <classesDirectory>${project.build.directory}/empty-javadoc</classesDirectory>
+                                </configuration>
                             </execution>
                         </executions>
                     </plugin>
